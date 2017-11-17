@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include "tserverfhesiutils.h"
+#include "FHE-SI.h"
 using namespace std;
 
 class TServer {
@@ -22,7 +23,7 @@ private:
     void socketListen();
     void socketAccept();
     void handleRequest(int);
-    void receiveEncryptionParamFromClient();
+    void receiveEncryptionParamFromClient(int);
 public:
     TServer(string,int);
     bool sendStream(ifstream,int);

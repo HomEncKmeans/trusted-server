@@ -63,9 +63,9 @@ void TServer::socketAccept() {
 }
 
 void TServer::handleRequest(int socketFD) {
-    string message = this->receiveMessage(socketFD);
+    string message = this->receiveMessage(socketFD,4);
     if(message=="C-PK"){
-        this->receiveEncryptionParamFromClient();
+        this->receiveEncryptionParamFromClient(socketFD);
     }else if(message=="U-START-KM"){
 
     }else if(message=="U-NEW-CENTROID"){
@@ -118,12 +118,31 @@ string TServer::receiveMessage(int socketFD, int buffersize) {
         perror("RECEIVE FAILED");
     }
     message=buffer;
-    this->log(socketFD,"---> "+message);
+    message.erase(static_cast<unsigned long>(buffersize));
+    this->log(socketFD,"---> " + message);
     return message;
 }
 
-ifstream TServer::receiveStream(int) {
-    return std::ifstream();
+ifstream TServer::receiveStream(int socketFD) {
+    uint32_t size;
+    auto *data = (char*)&size;
+    if(recv(socketFD,data,sizeof(uint32_t),0)<0){
+        perror("RECEIVE SIZE ERROR");
+    }
+    ntohl(size);
+    this->log(socketFD,"--> SIZE: "+to_string(size));
+    this->sendMessage(socketFD,"SIZE-OK");
+    char buffer[size];
+    ssize_t r= recv(socketFD,buffer,size,0);
+    print(r);
+    if(r<0){
+        perror("RECEIVE STREAM ERROR");
+    }
+    ofstream temp("temp.dat",ios::out|ios::binary);
+    temp.write(buffer,size);
+    temp.close();
+
+    return ifstream("temp.dat");
 }
 
 void TServer::log(int socket, string message){
@@ -138,4 +157,27 @@ void TServer::log(int socket, string message){
     port = addressInternet->sin_port;
     string msg = "["+ip+":"+to_string(port)+"] "+message;
     print(msg);
+}
+
+void TServer::receiveEncryptionParamFromClient( int socketFD) {
+    this->sendMessage(socketFD,"T-PK-READY");
+    this->receiveStream(socketFD);
+    this->sendMessage(socketFD,"T-PK-RECEIVED");
+    string message = this->receiveMessage(socketFD,5);
+    if(message!="C-SMT"){
+        perror("ERROR IN PROTOCOL 2-STEP 2");
+        return;
+    }
+    this->sendMessage(socketFD,"T-SMT-READY");
+    this->receiveStream(socketFD);
+    this->sendMessage(socketFD,"T-SMT-RECEIVED");
+    string message1 = this->receiveMessage(socketFD,5);
+    if(message1!="C-SKT"){
+        perror("ERROR IN PROTOCOL 2-STEP 3");
+        return;
+    }
+    this->sendMessage(socketFD,"T-SKT-READY");
+    this->receiveStream(socketFD);
+    this->sendMessage(socketFD,"T-SKT-RECEIVED");
+    this->socketAccept();
 }
