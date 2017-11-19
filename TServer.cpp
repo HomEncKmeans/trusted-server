@@ -11,7 +11,35 @@ TServer::TServer(string t_serverIP, int t_serverPort) {
     this->socketBind();
     this->socketListen();
     this->socketAccept();
-    this->handleRequest(this->t_serverSocket);
+    print("CLIENT ENCRYPTION PARAMETERS");
+    ifstream contextfile("context.dat");
+    FHEcontext fhEcontext(contextfile);
+    this->client_context=&fhEcontext;
+    activeContext=&fhEcontext;
+    ifstream pkC("pkC.dat");
+    FHESIPubKey fhesiPubKey(fhEcontext);
+    fhesiPubKey.Import(pkC);
+    this->client_pubkey=&fhesiPubKey;
+    ifstream skT("skT.dat");
+    FHESISecKey fhesiSecKey(fhEcontext);
+    fhesiSecKey.Import(skT);
+    this->t_server_seckey=&fhesiSecKey;
+    ifstream smT("smT.dat");
+    KeySwitchSI keySwitchSI(fhEcontext);
+    keySwitchSI.Import(smT);
+    this->t_server_SM=&keySwitchSI;
+    print("CONTEXT");
+    print(fhEcontext);
+    print("CLIENT PUBLIC KEY");
+    print(fhesiPubKey);
+    print("TSERVER SECRET KEY");
+    print(fhesiSecKey);
+    print("TSERVER SWITCH MATRIX ");
+    print(keySwitchSI);
+
+    this->socketAccept();
+
+
 }
 
 
@@ -123,7 +151,7 @@ string TServer::receiveMessage(int socketFD, int buffersize) {
     return message;
 }
 
-ifstream TServer::receiveStream(int socketFD) {
+ifstream TServer::receiveStream(int socketFD,string filename) {
     uint32_t size;
     auto *data = (char*)&size;
     if(recv(socketFD,data,sizeof(uint32_t),0)<0){
@@ -138,11 +166,11 @@ ifstream TServer::receiveStream(int socketFD) {
     if(r<0){
         perror("RECEIVE STREAM ERROR");
     }
-    ofstream temp("temp.dat",ios::out|ios::binary);
+    ofstream temp(filename,ios::out|ios::binary);
     temp.write(buffer,size);
     temp.close();
 
-    return ifstream("temp.dat");
+    return ifstream("filename");
 }
 
 void TServer::log(int socket, string message){
@@ -161,7 +189,7 @@ void TServer::log(int socket, string message){
 
 void TServer::receiveEncryptionParamFromClient( int socketFD) {
     this->sendMessage(socketFD,"T-PK-READY");
-    this->receiveStream(socketFD);
+    this->receiveStream(socketFD,"pkC.dat");
     this->sendMessage(socketFD,"T-PK-RECEIVED");
     string message = this->receiveMessage(socketFD,5);
     if(message!="C-SMT"){
@@ -169,7 +197,7 @@ void TServer::receiveEncryptionParamFromClient( int socketFD) {
         return;
     }
     this->sendMessage(socketFD,"T-SMT-READY");
-    this->receiveStream(socketFD);
+    this->receiveStream(socketFD,"smT.dat");
     this->sendMessage(socketFD,"T-SMT-RECEIVED");
     string message1 = this->receiveMessage(socketFD,5);
     if(message1!="C-SKT"){
@@ -177,7 +205,16 @@ void TServer::receiveEncryptionParamFromClient( int socketFD) {
         return;
     }
     this->sendMessage(socketFD,"T-SKT-READY");
-    this->receiveStream(socketFD);
+    this->receiveStream(socketFD,"skT.dat");
     this->sendMessage(socketFD,"T-SKT-RECEIVED");
-    this->socketAccept();
+    string message2 = this->receiveMessage(socketFD,9);
+    if(message2!="C-CONTEXT"){
+        perror("ERROR IN PROTOCOL 2-STEP 4");
+        return;
+    }
+    this->sendMessage(socketFD,"T-C-READY");
+    this->receiveStream(socketFD,"context.dat");
+    this->sendMessage(socketFD,"T-C-RECEIVED");
+    print("PROTOCOL 2 COMPLETED");
+
 }
