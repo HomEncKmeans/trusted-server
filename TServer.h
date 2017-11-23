@@ -13,10 +13,15 @@
 #include "FHE-SI.h"
 #include "FHEContext.h"
 #include "Serialization.h"
+#include <map>
 using namespace std;
 
 class TServer {
 private:
+    unsigned k;
+    map<unsigned,long> clusters_counter;
+    map<unsigned,Ciphertext> point_distances;
+    bool active;
     string t_serverIP;
     int t_serverPort;
     int t_serverSocket;
@@ -30,6 +35,11 @@ private:
     void socketAccept();
     void handleRequest(int);
     void receiveEncryptionParamFromClient(int);
+    void initializeKM(int);
+    void classifyToCluster(int);
+    unsigned extractClusterIndex();
+    void calculateCentroid(int);
+    Plaintext newCentroid(const Plaintext &,long);
 public:
     TServer(string,int);
     bool sendStream(ifstream,int);

@@ -4,6 +4,7 @@
 
 #include "TServer.h"
 TServer::TServer(string t_serverIP, int t_serverPort) {
+    this->active=true;
     this->t_serverIP= move(t_serverIP);
     this->t_serverPort=t_serverPort;
     print("TRUSTED SERVER");
@@ -37,8 +38,9 @@ TServer::TServer(string t_serverIP, int t_serverPort) {
     print("TSERVER SWITCH MATRIX ");
     print(keySwitchSI);
 
-    this->socketAccept();
-
+    while(this->active){
+        this->socketAccept();
+    }
 
 }
 
@@ -94,10 +96,12 @@ void TServer::handleRequest(int socketFD) {
     string message = this->receiveMessage(socketFD,4);
     if(message=="C-PK"){
         this->receiveEncryptionParamFromClient(socketFD);
-    }else if(message=="U-START-KM"){
-
-    }else if(message=="U-NEW-CENTROID"){
-
+    }else if(message=="U-KM"){
+        this->initializeKM(socketFD);
+    }else if(message=="U-DP"){
+        this->classifyToCluster(socketFD);
+    }else if(message=="U-NC"){
+        this->calculateCentroid(socketFD);
     }else{
         perror("ERROR IN PROTOCOL INITIALIZATION");
         return;
@@ -217,4 +221,96 @@ void TServer::receiveEncryptionParamFromClient( int socketFD) {
     this->sendMessage(socketFD,"T-C-RECEIVED");
     print("PROTOCOL 2 COMPLETED");
 
+}
+
+void TServer::initializeKM(int socketFD) {
+    this->sendMessage(socketFD,"T-READY");
+    uint32_t size;
+    auto *data = (char*)&size;
+    if(recv(socketFD,data,sizeof(uint32_t),0)<0){
+        perror("RECEIVE K ERROR");
+    }
+    ntohl(size);
+    this->log(socketFD,"--> K: "+to_string(size));
+    this->k=size;
+    for(unsigned i=0;i<this->k;i++){
+        this->clusters_counter[i]=0;
+    }
+    this->sendMessage(socketFD,"T-K-RECEIVED");
+    print("PROTOCOL 4 COMPLETED");
+}
+
+void TServer::classifyToCluster(int socketFD) {
+    this->sendMessage(socketFD,"T-READY");
+    for(int i=0;i<this->k;i++){
+        uint32_t index;
+        auto *data = (char*)&index;
+        if(recv(socketFD,data,sizeof(uint32_t),0)<0){
+            perror("RECEIVE INDEX ERROR");
+        }
+        ntohl(index);
+        this->sendMessage(socketFD,"T-RECEIVED-CI");
+        Ciphertext distance(*this->client_pubkey);
+        this->receiveStream(socketFD,to_string(index)+".dat");
+        ifstream in(to_string(index)+".dat");
+        Import(in,distance);
+        this->point_distances[index]=distance;
+        this->sendMessage(socketFD,"T-D-RECEIVED");
+    }
+    string message = this->receiveMessage(socketFD, 5);
+    if (message != "U-R-I") {
+        perror("ERROR IN PROTOCOL 5-STEP 1");
+        return;
+    }
+    u_int32_t index=extractClusterIndex();
+    this->clusters_counter[index]+=1;
+    if (0 > send(socketFD, &index, sizeof(uint32_t), 0)) {
+        perror("SEND INDEX FAILED.");
+        return;
+    }
+    string message1 = this->receiveMessage(socketFD, 12);
+    if (message1 != "U-RECEIVED-I") {
+        perror("ERROR IN PROTOCOL 5-STEP 2");
+        return;
+    }
+}
+
+unsigned TServer::extractClusterIndex() {
+    map<unsigned,long> distancesHM;
+    ZZ p = this->client_context->ModulusP();
+    for(unsigned i=0;i<this->k;i++){
+        Plaintext pdistance;
+        Ciphertext cdistance=this->point_distances[i];
+        this->t_server_SM->ApplyKeySwitch(cdistance);
+        this->t_server_seckey->Decrypt(pdistance,cdistance);
+        distancesHM[i]=extraxtHM(pdistance,p);
+    }
+    unsigned index=0;
+    long min=distancesHM[index];
+    for(unsigned i=0;i<this->k;i++){
+        if(min>distancesHM[i]){
+            index=i;
+            min=distancesHM[i];
+        }
+    }
+    return index;
+}
+
+void TServer::calculateCentroid(int socketFD){
+
+}
+
+
+Plaintext TServer::newCentroid(const Plaintext &sum, long mean) {
+    ZZ_pX centroidx =sum.message;
+    ZZ_pX new_centroid;
+    ZZ_p coef;
+    for(long i=0;i<centroidx.rep.length();i++){
+        coef=coeff(centroidx,i);
+        ZZ x= rep(coef);
+        long t=to_long(x)/mean;
+        SetCoeff(new_centroid,i,t);
+    }
+    Plaintext centroid(*this->client_context,new_centroid);
+    return centroid;
 }

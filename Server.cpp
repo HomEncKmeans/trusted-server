@@ -59,8 +59,6 @@ void Server::SocketListen() {
     cout << "Socket is beeing listened now\n";
 };
 
-
-
 void Server::SocketAccept() {
 
     int socketFD;
@@ -75,8 +73,6 @@ void Server::SocketAccept() {
         };
     };
 };
-
-
 
 void Server::SocketRead(int socketPointer) {
 
