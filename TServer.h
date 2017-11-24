@@ -40,6 +40,7 @@ private:
     unsigned extractClusterIndex();
     void calculateCentroid(int);
     Plaintext newCentroid(const Plaintext &,long);
+    ifstream centroidsToStream(const Ciphertext &);
 public:
     TServer(string,int);
     bool sendStream(ifstream,int);
