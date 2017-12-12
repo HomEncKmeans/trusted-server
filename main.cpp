@@ -1,4 +1,5 @@
-#include "TServer.h"
+//#include "TServer.h"
+#include "TServerV1.h"
 #include <ctime>
 #include <chrono>
 #include <iomanip>
@@ -6,7 +7,8 @@ int main() {
 
     clock_t c_start = clock();
     auto t_start = chrono::high_resolution_clock::now();
-    TServer server("127.0.0.1",5002);
+    //TServer server("127.0.0.1",5002);
+    TServerV1 server("127.0.0.1",5002,"127.0.0.1",5001,3);
     std::clock_t c_end = std::clock();
     auto t_end = std::chrono::high_resolution_clock::now();
     std::cout << fixed << setprecision(2) << "CPU time used: "
