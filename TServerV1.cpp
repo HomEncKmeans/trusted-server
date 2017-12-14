@@ -113,18 +113,21 @@ TServerV1::TServerV1(string t_serverIP, int t_serverPort, string u_serverIP, int
                     return;
                 }
             }
-            this->sendMessage(this->u_serverSocket, "T-NC-END");
-            string message4 = this->receiveMessage(this->u_serverSocket, 13);
-            if (message4 != "U-NC-RECEIVED") {
-                perror("ERROR IN PROTOCOL 6-STEP 5");
-                return;
+            if(i==this->k-1){
+                this->sendMessage(this->u_serverSocket, "T-NC-UPD");
+                string message5 = this->receiveMessage(this->u_serverSocket, 7);
+                if (message5 != "U-READY") {
+                    perror("ERROR IN PROTOCOL 6-STEP 6");
+                    return;
+                }
+            }else {
+                this->sendMessage(this->u_serverSocket, "T-NC-END");
+                string message4 = this->receiveMessage(this->u_serverSocket, 13);
+                if (message4 != "U-NC-RECEIVED") {
+                    perror("ERROR IN PROTOCOL 6-STEP 5");
+                    return;
+                }
             }
-        }
-        this->sendMessage(this->u_serverSocket, "T-NC-UPDATED");
-        string message5 = this->receiveMessage(this->u_serverSocket, 7);
-        if (message5 != "U-READY") {
-            perror("ERROR IN PROTOCOL 6-STEP 6");
-            return;
         }
         close(this->u_serverSocket);
         this->u_serverSocket = -1;
