@@ -14,6 +14,8 @@
 #include "FHEContext.h"
 #include "Serialization.h"
 #include <map>
+#include <random>
+#include "unistd.h"
 using namespace std;
 
 class TServerV1 {
@@ -23,9 +25,10 @@ private:
     map<uint32_t,bitset<6>> A;
     map<uint32_t ,bitset<6>> A_r;
     map<uint32_t ,vector<uint32_t >> points;
-    map<uint32_t ,vector<uint32_t >> centroids;
-    map<uint32_t ,int> centroids_clusters;
-    map<int,uint32_t > rev_centroids_clusters;
+//    map<uint32_t ,vector<uint32_t >> centroids;
+//    map<uint32_t ,int> centroids_clusters;
+//    map<int,uint32_t > rev_centroids_clusters;
+
     int max_round;
     int variance_bound;
     map<unsigned,long> clusters_counter;
@@ -59,17 +62,21 @@ private:
     void handleRequest(int);
     void receiveEncryptionParamFromClient(int);
     void receiveUnEncryptedData(int);
+    void connectToUServer();
+    void initializeClusters();
+    long calculateVariance();
+    ifstream centroidCoefToStream(const Ciphertext &);
+    unsigned extractClusterIndex(const map<uint32_t ,Ciphertext>);
+
+    //to be implemnt
     void initializeKM(int);
     void classifyToCluster(int);
-    unsigned extractClusterIndex();
     void calculateCentroid(int);
     Plaintext newCentroid(const Plaintext &,long);
-    ifstream centroidsToStream(const Ciphertext &);
-    void connectToUServer();
     ifstream distanceToStream(const Ciphertext &);
-    void initializeClusters();
+
     void initializeCentroids();
-    long calculateVariance();
+
     void swapA();
     void initializeKMToTServer();
     void endKMToUserver();

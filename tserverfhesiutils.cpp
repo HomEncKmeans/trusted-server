@@ -23,3 +23,14 @@ long extraxtHM(const Plaintext &distance, ZZ &p) {
     }
     return to_long(hmd);
 }
+
+long extraxtDistance(const Plaintext &distance) {
+    ZZ_pX dp =distance.message;
+    ZZ_p dhm;
+    ZZ hmd;
+    dhm=coeff(dp,0);
+    hmd= rep(dhm);
+    return to_long(hmd);
+}
+
+

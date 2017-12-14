@@ -16,7 +16,7 @@
 #include "ZZ_pX.h"
 #include "Ciphertext.h"
 long extraxtHM(const Plaintext &distance,ZZ &p);
-
+long extraxtDistance(const Plaintext &distance);
 template <typename T>
 void print(const T &message){
     std::cout<<message<<std::endl;

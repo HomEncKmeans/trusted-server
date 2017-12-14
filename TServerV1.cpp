@@ -4,12 +4,13 @@
 
 #include "TServerV1.h"
 
-TServerV1::TServerV1(string t_serverIP, int t_serverPort,string u_serverIP, int u_serverPort, unsigned k, int max_round,
+TServerV1::TServerV1(string t_serverIP, int t_serverPort, string u_serverIP, int u_serverPort, unsigned k,
+                     int max_round,
                      int variance_bound, bool verbose) {
     this->k = k;
     this->max_round = max_round;
     this->variance_bound = variance_bound;
-    this->verbose=true;
+    this->verbose = true;
     this->u_serverIP = move(u_serverIP);
     this->u_serverPort = u_serverPort;
     this->t_serverIP = move(t_serverIP);
@@ -46,11 +47,144 @@ TServerV1::TServerV1(string t_serverIP, int t_serverPort,string u_serverIP, int 
     print("TServerV1 SWITCH MATRIX ");
     print(keySwitchSI);
     this->socketAccept();
-
-
-
-
     print("K-MEANS-INITIALIZATION");
+    this->initializeClusters();
+    print("END OF K-MEANS INITIALIZATION");
+    print("STARTING K-MEANS ROUNDS");
+    int r = 0;
+    long s = this->calculateVariance();
+    while (r < this->max_round && s >= this->variance_bound) {
+        print("ROUND: " + to_string(r));
+
+        this->connectToUServer();
+        print("CREATE NEW CENTROIDS");
+        this->sendMessage(this->u_serverSocket, "T-NC");
+        string message = this->receiveMessage(this->u_serverSocket, 10);
+        if (message != "U-NC-READY") {
+            perror("ERROR IN PROTOCOL 6-STEP 1");
+            return;
+        }
+
+        for (unsigned i = 0; i < this->k; i++) {
+            //create and send centroids
+            uint32_t index = i;
+            if (0 > send(this->u_serverSocket, &index, sizeof(uint32_t), 0)) {
+                perror("SEND INDEX FAILED.");
+                return;
+            }
+            string message1 = this->receiveMessage(this->u_serverSocket, 13);
+            if (message1 != "U-RECEIVED-CI") {
+                perror("ERROR IN PROTOCOL 6-STEP 2");
+                return;
+            }
+            vector<uint32_t> cluster_members;
+            for (auto &iter:this->A) {
+                if (iter.second[i] == 1) {
+                    cluster_members.push_back(iter.first);
+                }
+            }
+            //Create and send coef of the centroid;
+            for (unsigned j = 0; j < this->dim; j++) {
+                uint32_t coef = 0;
+                for (unsigned t = 0; t < cluster_members.size(); t++) {
+                    coef += this->points[cluster_members[k]][j];
+                }
+                long total_coef = coef / cluster_members.size();
+                ZZ_pX coefX;
+                SetCoeff(coefX, 0, total_coef);
+                uint32_t coefindex = j;
+                htonl(coefindex);
+                if (0 > send(this->u_serverSocket, &coefindex, sizeof(uint32_t), 0)) {
+                    perror("ERROR IN PROTOCOL 6-STEP 3.");
+                    return;
+                }
+                string message2 = this->receiveMessage(this->u_serverSocket, 16);
+                if (message2 != "U-INDEX-RECEIVED") {
+                    perror("ERROR IN PROTOCOL 6-STEP 3.1");
+                    return;
+                }
+                Ciphertext ciphertext(*this->client_pubkey);
+                Plaintext plaintext(*this->client_context, coefX);
+                this->client_pubkey->Encrypt(ciphertext, plaintext);
+                this->sendStream(this->centroidCoefToStream(ciphertext), this->u_serverSocket);
+                string message3 = this->receiveMessage(this->u_serverSocket, 15);
+                if (message3 != "U-COEF-RECEIVED") {
+                    perror("ERROR IN PROTOCOL 6-STEP 4");
+                    return;
+                }
+            }
+            this->sendMessage(this->u_serverSocket, "T-NC-END");
+            string message4 = this->receiveMessage(this->u_serverSocket, 13);
+            if (message4 != "U-NC-RECEIVED") {
+                perror("ERROR IN PROTOCOL 6-STEP 5");
+                return;
+            }
+        }
+        this->sendMessage(this->u_serverSocket, "T-NC-UPDATED");
+        string message5 = this->receiveMessage(this->u_serverSocket, 7);
+        if (message5 != "U-READY") {
+            perror("ERROR IN PROTOCOL 6-STEP 6");
+            return;
+        }
+        close(this->u_serverSocket);
+        this->u_serverSocket = -1;
+
+        //Classify  points to clusters.
+        this->connectToUServer();
+        this->sendMessage(this->u_serverSocket, "T-DP");
+        string message6 = this->receiveMessage(this->u_serverSocket, 7);
+        if (message6 != "U-READY") {
+            perror("ERROR IN PROTOCOL 5-STEP 1");
+            return;
+        }
+        for(unsigned i=0;i<this->A_r.size();i++){
+            uint32_t identifier;
+            auto *data = (char *) &identifier;
+            if (recv(this->u_serverSocket, data, sizeof(uint32_t), 0) < 0) {
+                perror("RECEIVE IDENTIFIER ERROR. ERROR IN PROTOCOL 5-STEP 2");
+            }
+            ntohl(identifier);
+            this->log(this->u_serverSocket, "--> POINT IDENTIFIER: " + to_string(identifier));
+            map<uint32_t,Ciphertext> distances;
+            this->sendMessage(this->u_serverSocket,"T-R-I");
+            for(unsigned j = 0 ; j<this->k;j++){
+                uint32_t index;
+                auto *data1 = (char *) &index;
+                if (recv(this->u_serverSocket, data1, sizeof(uint32_t), 0) < 0) {
+                    perror("RECEIVE INDEX ERROR. ERROR IN PROTOCOL 5-STEP 3");
+                }
+                ntohl(index);
+                this->log(this->u_serverSocket, "--> CLUSTER INDEX: " + to_string(index));
+                this->sendMessage(this->u_serverSocket,"T-R-CI");
+                string filename = "distance_" + to_string(index) + ".dat";
+                ifstream cipher = this->receiveStream(this->u_serverSocket, filename);
+                Ciphertext ciphertext(*this->client_pubkey);
+                ifstream in(filename);
+                Import(in, ciphertext);
+                distances[index]=ciphertext;
+                this->sendMessage(this->u_serverSocket,"T-R-D");
+            }
+            this->A_r[identifier][this->extractClusterIndex(distances)]=1;
+            this->sendMessage(this->u_serverSocket,"T-R-D-P");
+        }
+        string message7 = this->receiveMessage(this->u_serverSocket, 5);
+        if (message6 != "U-F-D") {
+            perror("ERROR IN PROTOCOL 5-STEP 5");
+            return;
+        }
+        this->sendMessage(this->u_serverSocket,"T_READY");
+        close(this->u_serverSocket);
+        this->u_serverSocket = -1;
+        s = this->calculateVariance();
+        r++;
+        print(r);
+        this->swapA();
+    }
+
+    this->endKMToUserver();
+    this->resultsToKClient();
+    print("END-OF-KMEANS");
+
 
     //this->initializeKMToUServer();
     //this->initializeClusters();
@@ -197,18 +331,18 @@ ifstream TServerV1::receiveStream(int socketFD, string filename) {
 }
 
 void TServerV1::log(int socket, string message) {
-    if(this->verbose){
-    sockaddr address;
-    socklen_t addressLength;
-    sockaddr_in *addressInternet;
-    string ip;
-    int port;
-    getpeername(socket, &address, &addressLength);
-    addressInternet = (struct sockaddr_in *) &address;
-    ip = inet_ntoa(addressInternet->sin_addr);
-    port = addressInternet->sin_port;
-    string msg = "[" + ip + ":" + to_string(port) + "] " + message;
-    print(msg);
+    if (this->verbose) {
+        sockaddr address;
+        socklen_t addressLength;
+        sockaddr_in *addressInternet;
+        string ip;
+        int port;
+        getpeername(socket, &address, &addressLength);
+        addressInternet = (struct sockaddr_in *) &address;
+        ip = inet_ntoa(addressInternet->sin_addr);
+        port = addressInternet->sin_port;
+        string msg = "[" + ip + ":" + to_string(port) + "] " + message;
+        print(msg);
     }
 }
 
@@ -243,8 +377,9 @@ void TServerV1::receiveEncryptionParamFromClient(int socketFD) {
     print("PROTOCOL 2 COMPLETED");
 
 }
+
 void TServerV1::receiveUnEncryptedData(int socketFD) {
-    this->sendMessage(socketFD,"T-DATA-READY");
+    this->sendMessage(socketFD, "T-DATA-READY");
     uint32_t dimension;
     auto *data1 = (char *) &dimension;
     if (recv(socketFD, data1, sizeof(uint32_t), 0) < 0) {
@@ -252,8 +387,8 @@ void TServerV1::receiveUnEncryptedData(int socketFD) {
     }
     ntohl(dimension);
     this->log(socketFD, "--> Data dimension: " + to_string(dimension));
-    this->dim=dimension;
-    this->sendMessage(socketFD,"T-D-RECEIVED");
+    this->dim = dimension;
+    this->sendMessage(socketFD, "T-D-RECEIVED");
     uint32_t numberofpoints;
     auto *data2 = (char *) &numberofpoints;
     if (recv(socketFD, data2, sizeof(uint32_t), 0) < 0) {
@@ -261,31 +396,31 @@ void TServerV1::receiveUnEncryptedData(int socketFD) {
     }
     ntohl(numberofpoints);
     this->log(socketFD, "--> Number of Points: " + to_string(numberofpoints));
-    this->number_of_points=numberofpoints;
-    this->sendMessage(socketFD,"T-N-RECEIVED");
-    string message = this->receiveMessage(socketFD,8);
+    this->number_of_points = numberofpoints;
+    this->sendMessage(socketFD, "T-N-RECEIVED");
+    string message = this->receiveMessage(socketFD, 8);
     if (message != "C-DATA-P") {
         perror("ERROR IN PROTOCOL 3.1-STEP 4");
         return;
     }
-    this->sendMessage(socketFD,"T-DATA-P-READY");
-    for(unsigned i=0; i<this->number_of_points;i++){
+    this->sendMessage(socketFD, "T-DATA-P-READY");
+    for (unsigned i = 0; i < this->number_of_points; i++) {
         uint32_t identifier;
         auto *data = (char *) &identifier;
         if (recv(socketFD, data, sizeof(uint32_t), 0) < 0) {
             perror("RECEIVE CLUSTER INDEX ERROR. ERROR IN PROTOCOL 3.1-STEP 5");
         }
         ntohl(identifier);
-        this->sendMessage(socketFD,"T-P-I-RECEIVED");
+        this->sendMessage(socketFD, "T-P-I-RECEIVED");
         vector<uint32_t> point;
-        for(unsigned j=0; j<this->dim;j++){
+        for (unsigned j = 0; j < this->dim; j++) {
             uint32_t index;
             auto *data3 = (char *) &index;
             if (recv(socketFD, data3, sizeof(uint32_t), 0) < 0) {
                 perror("RECEIVE CLUSTER INDEX ERROR. ERROR IN PROTOCOL 3.1-STEP 6");
             }
             ntohl(index);
-            this->sendMessage(socketFD,"T-INDEX-RECEIVED");
+            this->sendMessage(socketFD, "T-INDEX-RECEIVED");
             uint32_t coef;
             auto *data4 = (char *) &coef;
             if (recv(socketFD, data4, sizeof(uint32_t), 0) < 0) {
@@ -295,162 +430,112 @@ void TServerV1::receiveUnEncryptedData(int socketFD) {
 
 
             point.push_back(coef);
-            this->sendMessage(socketFD,"T-COEF-RECEIVED");
+            this->sendMessage(socketFD, "T-COEF-RECEIVED");
         }
-        this->points[identifier]=point;
+        this->points[identifier] = point;
         bitset<6> cluster;
-        this->A[identifier]=cluster;
-        this->A_r[identifier]=cluster;
+        this->A[identifier] = cluster;
+        this->A_r[identifier] = cluster;
     }
 
-    string message1 = this->receiveMessage(socketFD,8);
+    string message1 = this->receiveMessage(socketFD, 8);
     if (message1 != "C-DATA-E") {
         perror("ERROR IN PROTOCOL 3.1-STEP 7");
         return;
     }
-    this->sendMessage(socketFD,"T-DATA-RECEIVED");
+    this->sendMessage(socketFD, "T-DATA-RECEIVED");
     print("PROTOCOL 3 COMPLETED");
 
 }
 
-
-
-
-
-/*
-void TServerV1::initializeKM(int socketFD) {
-    this->sendMessage(socketFD, "T-READY");
-    uint32_t size;
-    auto *data = (char *) &size;
-    if (recv(socketFD, data, sizeof(uint32_t), 0) < 0) {
-        perror("RECEIVE K ERROR");
-    }
-    ntohl(size);
-    this->log(socketFD, "--> K: " + to_string(size));
-    this->k = size;
-    for (unsigned i = 0; i < this->k; i++) {
-        this->clusters_counter[i] = 0;
-    }
-    this->sendMessage(socketFD, "T-K-RECEIVED");
-    print("PROTOCOL 4 COMPLETED");
-}
-
-void TServerV1::classifyToCluster(int socketFD) {
-    this->sendMessage(socketFD, "T-READY");
-    for (int i = 0; i < this->k; i++) {
-        uint32_t index;
-        auto *data = (char *) &index;
-        if (recv(socketFD, data, sizeof(uint32_t), 0) < 0) {
-            perror("RECEIVE INDEX ERROR");
+void TServerV1::connectToUServer() {
+    struct sockaddr_in u_server_address;
+    if (this->u_serverSocket == -1) {
+        this->u_serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+        if (this->u_serverSocket < 0) {
+            perror("ERROR ON USERVER SOCKET CREATION");
+            exit(1);
+        } else {
+            string message =
+                    "Socket for UServer created successfully. File descriptor: " + to_string(this->u_serverSocket);
+            print(message);
         }
-        ntohl(index);
-        this->sendMessage(socketFD, "T-RECEIVED-CI");
-        Ciphertext distance(*this->client_pubkey);
-        this->receiveStream(socketFD, to_string(index) + ".dat");
-        ifstream in(to_string(index) + ".dat");
-        Import(in, distance);
-        this->point_distances[index] = distance;
-        this->sendMessage(socketFD, "T-D-RECEIVED");
+
     }
-    string message = this->receiveMessage(socketFD, 5);
-    if (message != "U-R-I") {
-        perror("ERROR IN PROTOCOL 5-STEP 1");
-        return;
+    u_server_address.sin_addr.s_addr = inet_addr(this->u_serverIP.c_str());
+    u_server_address.sin_family = AF_INET;
+    u_server_address.sin_port = htons(static_cast<uint16_t>(this->u_serverPort));
+
+    if (connect(this->u_serverSocket, (struct sockaddr *) &u_server_address, sizeof(u_server_address)) < 0) {
+        perror("ERROR. CONNECTION FAILED TO USERVER");
+
+    } else {
+        print("TServerV1 CONNECTED TO USERVER");
     }
-    uint32_t index = extractClusterIndex();
-    this->clusters_counter[index] += 1;
-    if (0 > send(socketFD, &index, sizeof(uint32_t), 0)) {
-        perror("SEND INDEX FAILED.");
-        return;
-    }
-    string message1 = this->receiveMessage(socketFD, 12);
-    if (message1 != "U-RECEIVED-I") {
-        perror("ERROR IN PROTOCOL 5-STEP 2");
-        return;
+
+}
+
+void TServerV1::initializeClusters() {
+    default_random_engine generator;
+    uniform_int_distribution<int> distribution(0, this->k - 1);
+    int seed;
+    for (auto &iter : this->A) {
+        seed = distribution(generator);
+        iter.second[seed] = 1;
     }
 }
 
-unsigned TServerV1::extractClusterIndex() {
-    map<unsigned, long> distancesHM;
-    ZZ p = this->client_context->ModulusP();
+long TServerV1::calculateVariance() {
+    int variance = 0;
+    bitset<6> zeroset;
+    for (auto &iter:this->A) {
+        if (zeroset != (iter.second ^ this->A_r[iter.first])) {
+            variance++;
+        }
+    }
+    return variance;
+}
+
+ifstream TServerV1::centroidCoefToStream(const Ciphertext &centroid) {
+    ofstream ofstream1("centroidcoef.dat");
+    Export(ofstream1, centroid);
+    return ifstream("centroidcoef.dat");
+}
+
+unsigned TServerV1::extractClusterIndex(map<uint32_t ,Ciphertext> distances) {
+    map<unsigned, long> decrypted_distances;
     for (unsigned i = 0; i < this->k; i++) {
         Plaintext pdistance;
-        Ciphertext cdistance = this->point_distances[i];
+        Ciphertext cdistance = distances[i];
         this->t_server_SM->ApplyKeySwitch(cdistance);
         this->t_server_seckey->Decrypt(pdistance, cdistance);
-        distancesHM[i] = extraxtHM(pdistance, p);
+        decrypted_distances[i] = extraxtDistance(pdistance);
     }
     unsigned index = 0;
-    long min = distancesHM[index];
+    long min = decrypted_distances[index];
     for (unsigned i = 0; i < this->k; i++) {
-        if (min > distancesHM[i]) {
+        if (min > decrypted_distances[i]) {
             index = i;
-            min = distancesHM[i];
+            min = decrypted_distances[i];
         }
     }
     return index;
 }
 
-void TServerV1::calculateCentroid(int socketFD) {
-    this->sendMessage(socketFD, "T-NC-READY");
-    for(unsigned i=0;i<this->k;i++) {
-        uint32_t index;
-        auto *data = (char *) &index;
-        if (recv(socketFD, data, sizeof(uint32_t), 0) < 0) {
-            perror("RECEIVE INDEX ERROR");
-        }
-        ntohl(index);
-        this->sendMessage(socketFD,"T-RECEIVED-CI");
-        Ciphertext centroidsum(*this->client_pubkey);
-        this->receiveStream(socketFD, to_string(index) + "centroidsum.dat");
-        ifstream in(to_string(index) + "centroidsum.dat");
-        Import(in, centroidsum);
-        this->sendMessage(socketFD,"T-RECEIVED-C");
-        Plaintext pcentroidsum;
-        this->t_server_SM->ApplyKeySwitch(centroidsum);
-        this->t_server_seckey->Decrypt(pcentroidsum,centroidsum);
-        Plaintext newcentroid=this->newCentroid(pcentroidsum,this->clusters_counter[index]);
-        Ciphertext cnewcnetroid(*this->client_pubkey);
-        this->client_pubkey->Encrypt(cnewcnetroid,newcentroid);
-        this->sendStream(this->centroidsToStream(cnewcnetroid),socketFD);
-        string message = this->receiveMessage(socketFD, 13);
-        if (message != "U-NC-RECEIVED") {
-            perror("ERROR IN PROTOCOL 6-STEP 4");
-            return;
-        }
+void TServerV1::swapA() {
+    this->A = this->A_r;
+    bitset<6> zeroset;
+    for (auto &iter:this->A_r) {
+        iter.second = zeroset;
     }
-    string message1 = this->receiveMessage(socketFD, 11);
-    if (message1 != "U-C-UPDATED") {
-        perror("ERROR IN PROTOCOL 6-STEP 5");
+}
+
+void TServerV1::endKMToUserver() {
+    this->connectToUServer();
+    this->sendMessage(this->u_serverSocket, "TEKM");
+    string message = this->receiveMessage(this->u_serverSocket, 5);
+    if (message != "U-END") {
+        perror("ERROR IN PROTOCOL 7-STEP 1");
         return;
     }
-    for(auto &iter:this->clusters_counter){
-        iter.second=0;
-    }
-    this->sendMessage(socketFD,"T-READY");
-    print("K-MEANS ROUND FINISH");
 }
-
-
-Plaintext TServerV1::newCentroid(const Plaintext &sum, long mean) {
-    ZZ_pX centroidx = sum.message;
-    ZZ_pX new_centroid;
-    ZZ_p coef;
-    for (long i = 0; i < centroidx.rep.length(); i++) {
-        coef = coeff(centroidx, i);
-        ZZ x = rep(coef);
-        long t = to_long(x) / mean;
-        SetCoeff(new_centroid, i, t);
-    }
-    Plaintext centroid(*this->client_context, new_centroid);
-    return centroid;
-}
-
-
-ifstream TServerV1::centroidsToStream(const Ciphertext &centroid) {
-    ofstream ofstream1("centroid.dat");
-    Export(ofstream1, centroid);
-    return ifstream("centroid.dat");
-}
-
- */
