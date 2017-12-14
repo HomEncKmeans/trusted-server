@@ -67,20 +67,10 @@ private:
     long calculateVariance();
     ifstream centroidCoefToStream(const Ciphertext &);
     unsigned extractClusterIndex(const map<uint32_t ,Ciphertext>);
-
-    //to be implemnt
-    void initializeKM(int);
-    void classifyToCluster(int);
-    void calculateCentroid(int);
-    Plaintext newCentroid(const Plaintext &,long);
-    ifstream distanceToStream(const Ciphertext &);
-
-    void initializeCentroids();
-
     void swapA();
-    void initializeKMToTServer();
     void endKMToUserver();
     void resultsToKClient();
+
 
 
 public:

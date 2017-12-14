@@ -185,11 +185,6 @@ TServerV1::TServerV1(string t_serverIP, int t_serverPort, string u_serverIP, int
     this->resultsToKClient();
     print("END-OF-KMEANS");
 
-
-    //this->initializeKMToUServer();
-    //this->initializeClusters();
-
-
 }
 
 
@@ -539,3 +534,53 @@ void TServerV1::endKMToUserver() {
         return;
     }
 }
+
+void TServerV1::resultsToKClient() {
+    this->sendMessage(this->clientSocket, "T-RESULT");
+    string message = this->receiveMessage(this->clientSocket, 7);
+    if (message != "C-READY") {
+        perror("ERROR IN PROTOCOL 8-STEP 1");
+        return;
+    }
+    for (auto &iter:this->A) {
+        this->sendMessage(this->clientSocket, "T-P");
+        string message1 = this->receiveMessage(this->clientSocket, 5);
+        if (message1 != "C-P-R") {
+            perror("ERROR IN PROTOCOL 8-STEP 2");
+            return;
+        }
+        auto identity =(uint32_t) iter.first;
+        if (0 > send(this->clientSocket, &identity, sizeof(uint32_t), 0)) {
+            perror("SEND IDENTITY FAILED.");
+            return;
+        }
+        string message2 = this->receiveMessage(this->clientSocket, 5);
+        if (message2 != "P-I-R") {
+            perror("ERROR IN PROTOCOL 8-STEP 3");
+            return;
+        }
+        uint32_t index;
+        for (unsigned i = 0; i < this->k; i++) {
+            if (iter.second[i] == 1) {
+                index = i;
+            }
+        }
+        if (0 > send(this->clientSocket, &index, sizeof(uint32_t), 0)) {
+            perror("SEND CLUSTER INDEX FAILED.");
+            return;
+        }
+        string message3 = this->receiveMessage(this->clientSocket, 6);
+        if (message3 != "P-CI-R") {
+            perror("ERROR IN PROTOCOL 8-STEP 3");
+            return;
+        }
+    }
+    this->sendMessage(this->clientSocket, "T-RESULT-E");
+    string message4 = this->receiveMessage(this->clientSocket, 5);
+    if (message4 != "C-END") {
+        perror("ERROR IN PROTOCOL 8-STEP 3");
+        return;
+    }
+
+}
+
