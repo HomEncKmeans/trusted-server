@@ -16,6 +16,7 @@ TServerV1::TServerV1(string t_serverIP, int t_serverPort, string u_serverIP, int
     this->t_serverIP = move(t_serverIP);
     this->t_serverPort = t_serverPort;
     this->t_serverSocket = -1;
+    this->u_serverSocket=-1;
     print("TRUSTED SERVER");
     this->socketCreate();
     this->socketBind();
@@ -68,6 +69,7 @@ TServerV1::TServerV1(string t_serverIP, int t_serverPort, string u_serverIP, int
         for (unsigned i = 0; i < this->k; i++) {
             //create and send centroids
             uint32_t index = i;
+            htonl(index);
             if (0 > send(this->u_serverSocket, &index, sizeof(uint32_t), 0)) {
                 perror("SEND INDEX FAILED.");
                 return;
@@ -83,17 +85,20 @@ TServerV1::TServerV1(string t_serverIP, int t_serverPort, string u_serverIP, int
                     cluster_members.push_back(iter.first);
                 }
             }
+
             //Create and send coef of the centroid;
             for (unsigned j = 0; j < this->dim; j++) {
                 uint32_t coef = 0;
                 for (unsigned t = 0; t < cluster_members.size(); t++) {
-                    coef += this->points[cluster_members[k]][j];
+                    coef += this->points[cluster_members[t]][j];
                 }
                 long total_coef = coef / cluster_members.size();
                 ZZ_pX coefX;
                 SetCoeff(coefX, 0, total_coef);
                 uint32_t coefindex = j;
+
                 htonl(coefindex);
+
                 if (0 > send(this->u_serverSocket, &coefindex, sizeof(uint32_t), 0)) {
                     perror("ERROR IN PROTOCOL 6-STEP 3.");
                     return;
@@ -171,11 +176,11 @@ TServerV1::TServerV1(string t_serverIP, int t_serverPort, string u_serverIP, int
             this->sendMessage(this->u_serverSocket,"T-R-D-P");
         }
         string message7 = this->receiveMessage(this->u_serverSocket, 5);
-        if (message6 != "U-F-D") {
+        if (message7 != "U-F-D") {
             perror("ERROR IN PROTOCOL 5-STEP 5");
             return;
         }
-        this->sendMessage(this->u_serverSocket,"T_READY");
+        this->sendMessage(this->u_serverSocket,"T-READY");
         close(this->u_serverSocket);
         this->u_serverSocket = -1;
         s = this->calculateVariance();
@@ -553,6 +558,7 @@ void TServerV1::resultsToKClient() {
             return;
         }
         auto identity =(uint32_t) iter.first;
+        htonl(identity);
         if (0 > send(this->clientSocket, &identity, sizeof(uint32_t), 0)) {
             perror("SEND IDENTITY FAILED.");
             return;
@@ -568,6 +574,7 @@ void TServerV1::resultsToKClient() {
                 index = i;
             }
         }
+        htonl(index);
         if (0 > send(this->clientSocket, &index, sizeof(uint32_t), 0)) {
             perror("SEND CLUSTER INDEX FAILED.");
             return;
