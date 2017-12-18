@@ -8,7 +8,7 @@ TServerV2::TServerV2(string t_serverIP, int t_serverPort, bool verbose) {
     this->active = true;
     this->t_serverIP = move(t_serverIP);
     this->t_serverPort = t_serverPort;
-    this->verbose=verbose;
+    this->verbose = verbose;
     print("TRUSTED SERVER");
     this->socketCreate();
     this->socketBind();
@@ -192,7 +192,7 @@ ifstream TServerV2::receiveStream(int socketFD, string filename) {
 }
 
 void TServerV2::log(int socket, string message) {
-    if(this->verbose) {
+    if (this->verbose) {
         sockaddr address;
         socklen_t addressLength;
         sockaddr_in *addressInternet;
@@ -259,7 +259,7 @@ void TServerV2::initializeKM(int socketFD) {
         perror("RECEIVE DIMENSION ERROR");
     }
     ntohl(dimension);
-    this->log(socketFD, "--> DIMENSION: " + to_string(size));
+    this->log(socketFD, "--> DIMENSION: " + to_string(dimension));
     this->dim = dimension;
     this->sendMessage(socketFD, "T-DIM-RECEIVED");
     print("PROTOCOL 4 COMPLETED");
@@ -322,7 +322,7 @@ unsigned TServerV2::extractClusterIndex() {
 
 void TServerV2::calculateCentroid(int socketFD) {
     this->sendMessage(socketFD, "T-NC-READY");
-    for(unsigned i=0;i<this->k;i++) {
+    for (unsigned i = 0; i < this->k; i++) {
 
         uint32_t cluster_index;
         auto *data = (char *) &cluster_index;
@@ -330,20 +330,20 @@ void TServerV2::calculateCentroid(int socketFD) {
             perror("RECEIVE CLUSTER INDEX ERROR");
         }
         ntohl(cluster_index);
-        this->sendMessage(socketFD,"T-RECEIVED-CI");
-        for(unsigned j=0;j<this->dim;j++){
+        this->sendMessage(socketFD, "T-RECEIVED-CI");
+        for (unsigned j = 0; j < this->dim; j++) {
             uint32_t coef_index;
             auto *data1 = (char *) &coef_index;
             if (recv(socketFD, data1, sizeof(uint32_t), 0) < 0) {
                 perror("RECEIVE COEFFICIENT INDEX ERROR");
             }
             ntohl(coef_index);
-            this->sendMessage(socketFD,"T-INDEX-RECEIVED");
+            this->sendMessage(socketFD, "T-INDEX-RECEIVED");
             Ciphertext centroid_coef_sum(*this->client_pubkey);
             this->receiveStream(socketFD, to_string(cluster_index) + "centroidsum.dat");
             ifstream in(to_string(cluster_index) + "centroidsum.dat");
             Import(in, centroid_coef_sum);
-            this->sendMessage(socketFD,"T-COEF-RECEIVED");
+            this->sendMessage(socketFD, "T-COEF-RECEIVED");
             string message = this->receiveMessage(socketFD, 5);
             if (message != "U-R-C") {
                 perror("ERROR IN PROTOCOL 6-STEP 3");
@@ -351,11 +351,11 @@ void TServerV2::calculateCentroid(int socketFD) {
             }
             Plaintext pcoefcentroidsum;
             this->t_server_SM->ApplyKeySwitch(centroid_coef_sum);
-            this->t_server_seckey->Decrypt(pcoefcentroidsum,centroid_coef_sum);
-            Plaintext newcentroid=this->newCentroidCoef(pcoefcentroidsum,this->clusters_counter[cluster_index]);
+            this->t_server_seckey->Decrypt(pcoefcentroidsum, centroid_coef_sum);
+            Plaintext newcentroid = this->newCentroidCoef(pcoefcentroidsum, this->clusters_counter[cluster_index]);
             Ciphertext cnewcnetroid(*this->client_pubkey);
-            this->client_pubkey->Encrypt(cnewcnetroid,newcentroid);
-            this->sendStream(this->centroidCoefToStream(cnewcnetroid),socketFD);
+            this->client_pubkey->Encrypt(cnewcnetroid, newcentroid);
+            this->sendStream(this->centroidCoefToStream(cnewcnetroid), socketFD);
             string message1 = this->receiveMessage(socketFD, 8);
             if (message1 != "U-R-COEF") {
                 perror("ERROR IN PROTOCOL 6-STEP 4");
@@ -374,10 +374,10 @@ void TServerV2::calculateCentroid(int socketFD) {
         perror("ERROR IN PROTOCOL 6-STEP 5");
         return;
     }
-    for(auto &iter:this->clusters_counter){
-        iter.second=0;
+    for (auto &iter:this->clusters_counter) {
+        iter.second = 0;
     }
-    this->sendMessage(socketFD,"T-READY");
+    this->sendMessage(socketFD, "T-READY");
     print("K-MEANS ROUND FINISH");
 }
 
@@ -386,9 +386,14 @@ Plaintext TServerV2::newCentroidCoef(const Plaintext &sum, long mean) {
     ZZ_pX centroidx = sum.message;
     ZZ_pX new_centroid_coef;
     ZZ_p coef;
-    coef= coeff(centroidx, 0);
+    coef = coeff(centroidx, 0);
     const ZZ &x = rep(coef);
-    long t = to_long(x) / mean;
+    long t;
+    if (mean != 0) {
+        t = to_long(x) / mean;
+    } else {
+        t = to_long(x);
+    }
     SetCoeff(new_centroid_coef, 0, t);
     Plaintext centroid_coef(*this->client_context, new_centroid_coef);
     return centroid_coef;
