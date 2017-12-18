@@ -6,7 +6,7 @@
 
 using namespace std;
 
-long extraxtHM(const Plaintext &distance, ZZ &p) {
+long extractHM(const Plaintext &distance, ZZ &p) {
     ZZ_pX dp =distance.message;
     ZZ_p dhm;
     ZZ hmd=to_ZZ(0);
@@ -24,7 +24,7 @@ long extraxtHM(const Plaintext &distance, ZZ &p) {
     return to_long(hmd);
 }
 
-long extraxtDistance(const Plaintext &distance) {
+long extractDistance(const Plaintext &distance) {
     ZZ_pX dp =distance.message;
     ZZ_p dhm;
     ZZ hmd;

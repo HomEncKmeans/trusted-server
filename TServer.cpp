@@ -296,7 +296,7 @@ unsigned TServer::extractClusterIndex() {
         Ciphertext cdistance = this->point_distances[i];
         this->t_server_SM->ApplyKeySwitch(cdistance);
         this->t_server_seckey->Decrypt(pdistance, cdistance);
-        distancesHM[i] = extraxtHM(pdistance, p);
+        distancesHM[i] = extractHM(pdistance, p);
     }
     unsigned index = 0;
     long min = distancesHM[index];

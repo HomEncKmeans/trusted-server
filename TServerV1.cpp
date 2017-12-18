@@ -512,7 +512,7 @@ unsigned TServerV1::extractClusterIndex(map<uint32_t ,Ciphertext> distances) {
         Ciphertext cdistance = distances[i];
         this->t_server_SM->ApplyKeySwitch(cdistance);
         this->t_server_seckey->Decrypt(pdistance, cdistance);
-        decrypted_distances[i] = extraxtDistance(pdistance);
+        decrypted_distances[i] = extractDistance(pdistance);
     }
     unsigned index = 0;
     long min = decrypted_distances[index];

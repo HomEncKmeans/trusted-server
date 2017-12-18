@@ -19,9 +19,11 @@ using namespace std;
 class TServerV2 {
 private:
     unsigned k;
-    map<unsigned,long> clusters_counter;
-    map<unsigned,Ciphertext> point_distances;
+    unsigned dim;
+    map<uint32_t ,long> clusters_counter;
+    map<uint32_t,Ciphertext> point_distances;
     bool active;
+    bool verbose;
     string t_serverIP;
     int t_serverPort;
     int t_serverSocket;
@@ -39,10 +41,10 @@ private:
     void classifyToCluster(int);
     unsigned extractClusterIndex();
     void calculateCentroid(int);
-    Plaintext newCentroid(const Plaintext &,long);
-    ifstream centroidsToStream(const Ciphertext &);
+    Plaintext newCentroidCoef(const Plaintext &,long);
+    ifstream centroidCoefToStream(const Ciphertext &);
 public:
-    TServerV2(string,int);
+    TServerV2(string,int, bool verbose=true);
     bool sendStream(ifstream,int);
     bool sendMessage(int,string);
     string receiveMessage(int, int buffersize=64);
