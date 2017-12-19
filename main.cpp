@@ -1,6 +1,7 @@
 //#include "TServer.h"
 //#include "TServerV1.h"
-#include "TServerV2.h"
+//#include "TServerV2.h"
+#include "TServerV3.h"
 #include <ctime>
 #include <chrono>
 #include <iomanip>
@@ -10,7 +11,8 @@ int main() {
     auto t_start = chrono::high_resolution_clock::now();
     //TServer server("127.0.0.1",5002);
     //TServerV1 server("127.0.0.1",5002,"127.0.0.1",5001,3);
-    TServerV2 server("127.0.0.1",5002);
+    //TServerV2 server("127.0.0.1",5002);
+    TServerV3 server("127.0.0.1",5002);
 
     std::clock_t c_end = std::clock();
     auto t_end = std::chrono::high_resolution_clock::now();
