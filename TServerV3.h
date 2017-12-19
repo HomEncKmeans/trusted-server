@@ -41,8 +41,10 @@ private:
     void classifyToCluster(int);
     unsigned extractClusterIndex();
     void calculateCentroid(int);
+    void calculateVariance(int);
     Plaintext newCentroidCoef(const Plaintext &,long);
     ifstream centroidCoefToStream(const Ciphertext &);
+    ifstream indexToStream(const Ciphertext &);
 public:
     TServerV3(string,int, bool verbose=true);
     bool sendStream(ifstream,int);

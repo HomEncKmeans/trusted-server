@@ -104,6 +104,8 @@ void TServerV3::handleRequest(int socketFD) {
         this->classifyToCluster(socketFD);
     } else if (message == "U-NC") {
         this->calculateCentroid(socketFD);
+    }else if(message=="U-CV"){
+        this->calculateVariance(socketFD);
     } else if (message == "UEKM") {
         this->sendMessage(socketFD, "T-END");
         this->active = false;
@@ -287,15 +289,33 @@ void TServerV3::classifyToCluster(int socketFD) {
         perror("ERROR IN PROTOCOL 5-STEP 1");
         return;
     }
-    uint32_t index = extractClusterIndex();
+    unsigned index = extractClusterIndex();
     this->clusters_counter[index] += 1;
-    if (0 > send(socketFD, &index, sizeof(uint32_t), 0)) {
-        perror("SEND INDEX FAILED.");
-        return;
+    ZZ_pX zeroindexPX;
+    SetCoeff(zeroindexPX, 0, 0);
+    Plaintext plain_zero(*this->client_context, zeroindexPX);
+    Ciphertext cipher_zero(*this->client_pubkey);
+    this->client_pubkey->Encrypt(cipher_zero, plain_zero);
+    ZZ_pX unitindexPX;
+    SetCoeff(unitindexPX, 0, 0);
+    Plaintext plain_unit(*this->client_context, unitindexPX);
+    Ciphertext cipher_unit(*this->client_pubkey);
+    this->client_pubkey->Encrypt(cipher_unit, plain_unit);
+    for(unsigned j=0;j<this->k;j++){
+        if(index==j){
+            this->sendStream(this->indexToStream(cipher_unit), socketFD);
+        }else{
+            this->sendStream(this->indexToStream(cipher_zero),socketFD);
+        }
+        string message1 = this->receiveMessage(socketFD, 7);
+        if (message1 != "U-R-E-I") {
+            perror("ERROR IN PROTOCOL 5-STEP 2");
+            return;
+        }
     }
-    string message1 = this->receiveMessage(socketFD, 12);
-    if (message1 != "U-RECEIVED-I") {
-        perror("ERROR IN PROTOCOL 5-STEP 2");
+    string message2 = this->receiveMessage(socketFD, 12);
+    if (message2 != "U-RECEIVED-I") {
+        perror("ERROR IN PROTOCOL 5-STEP 3");
         return;
     }
 }
@@ -381,6 +401,36 @@ void TServerV3::calculateCentroid(int socketFD) {
     print("K-MEANS ROUND FINISH");
 }
 
+void TServerV3::calculateVariance(int socketFD) {
+    this->sendMessage(socketFD, "T-READY");
+    Ciphertext variance_cipher(*this->client_pubkey);
+    this->receiveStream(socketFD, "variance.dat");
+    ifstream in("variance.dat");
+    Import(in, variance_cipher);
+    Plaintext plain_variance;
+    this->t_server_SM->ApplyKeySwitch(variance_cipher);
+    this->t_server_seckey->Decrypt(plain_variance, variance_cipher);
+    ZZ_pX variancePx =plain_variance.message;
+    ZZ_p varianceP;
+    ZZ varianceZ;
+    varianceP=coeff(variancePx,0);
+    varianceZ= rep(varianceP);
+    long variance=to_long(varianceZ);
+    auto varTU = static_cast<uint32_t>(variance);
+    if (0 > send(socketFD, &varTU, sizeof(uint32_t), 0)) {
+        perror("SEND VARIANCE FAILED.");
+        return;
+    }
+    string message = this->receiveMessage(socketFD, 12);
+    if (message != "U-RECEIVED-V") {
+        perror("ERROR IN PROTOCOL 9-STEP 2");
+        return;
+    }
+    this->sendMessage(socketFD,"T-READY");;
+    print("K-MEANS ROUNDS VARIANCE CALCULATED");
+}
+
+
 
 Plaintext TServerV3::newCentroidCoef(const Plaintext &sum, long mean) {
     ZZ_pX centroidx = sum.message;
@@ -404,4 +454,10 @@ ifstream TServerV3::centroidCoefToStream(const Ciphertext &centroid) {
     ofstream ofstream1("centroidcoef.dat");
     Export(ofstream1, centroid);
     return ifstream("centroidcoef.dat");
+}
+
+ifstream TServerV3::indexToStream(const Ciphertext &index) {
+    ofstream ofstream1("index.dat");
+    Export(ofstream1, index);
+    return ifstream("index.dat");
 }
