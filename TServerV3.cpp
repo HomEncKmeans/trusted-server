@@ -297,7 +297,7 @@ void TServerV3::classifyToCluster(int socketFD) {
     Ciphertext cipher_zero(*this->client_pubkey);
     this->client_pubkey->Encrypt(cipher_zero, plain_zero);
     ZZ_pX unitindexPX;
-    SetCoeff(unitindexPX, 0, 0);
+    SetCoeff(unitindexPX, 0, 1);
     Plaintext plain_unit(*this->client_context, unitindexPX);
     Ciphertext cipher_unit(*this->client_pubkey);
     this->client_pubkey->Encrypt(cipher_unit, plain_unit);
@@ -416,6 +416,7 @@ void TServerV3::calculateVariance(int socketFD) {
     varianceP=coeff(variancePx,0);
     varianceZ= rep(varianceP);
     long variance=to_long(varianceZ);
+    print("CALCULATED VARIANCE: "+to_string(variance));
     auto varTU = static_cast<uint32_t>(variance);
     if (0 > send(socketFD, &varTU, sizeof(uint32_t), 0)) {
         perror("SEND VARIANCE FAILED.");
