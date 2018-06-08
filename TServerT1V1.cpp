@@ -2,9 +2,9 @@
 // Created by george on 16/11/2017.
 //
 
-#include "TServer.h"
+#include "TServerT1V1.h"
 
-TServer::TServer(string t_serverIP, int t_serverPort) {
+TServerT1V1::TServerT1V1(string t_serverIP, int t_serverPort) {
     this->active = true;
     this->t_serverIP = move(t_serverIP);
     this->t_serverPort = t_serverPort;
@@ -34,9 +34,9 @@ TServer::TServer(string t_serverIP, int t_serverPort) {
     print(fhEcontext);
     print("CLIENT PUBLIC KEY");
     print(fhesiPubKey);
-    print("TSERVER SECRET KEY");
+    print("TServerT1V1 SECRET KEY");
     print(fhesiSecKey);
-    print("TSERVER SWITCH MATRIX ");
+    print("TServerT1V1 SWITCH MATRIX ");
     print(keySwitchSI);
 
     while (this->active) {
@@ -46,7 +46,7 @@ TServer::TServer(string t_serverIP, int t_serverPort) {
 }
 
 
-void TServer::socketCreate() {
+void TServerT1V1::socketCreate() {
     this->t_serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (this->t_serverSocket < 0) {
         perror("ERROR IN SOCKET CREATION");
@@ -60,7 +60,7 @@ void TServer::socketCreate() {
 
 }
 
-void TServer::socketBind() {
+void TServerT1V1::socketBind() {
     struct sockaddr_in u_serverAddress;
     u_serverAddress.sin_family = AF_INET;
     u_serverAddress.sin_port = htons(static_cast<uint16_t>(this->t_serverPort));
@@ -75,13 +75,13 @@ void TServer::socketBind() {
 
 }
 
-void TServer::socketListen() {
+void TServerT1V1::socketListen() {
     listen(this->t_serverSocket, 5);
     print("Server is listening...");
 
 }
 
-void TServer::socketAccept() {
+void TServerT1V1::socketAccept() {
     int socketFD;
     socketFD = accept(this->t_serverSocket, NULL, NULL);
     if (socketFD < 0) {
@@ -93,7 +93,7 @@ void TServer::socketAccept() {
 
 }
 
-void TServer::handleRequest(int socketFD) {
+void TServerT1V1::handleRequest(int socketFD) {
     string message = this->receiveMessage(socketFD, 4);
     if (message == "C-PK") {
         this->receiveEncryptionParamFromClient(socketFD);
@@ -106,14 +106,14 @@ void TServer::handleRequest(int socketFD) {
     } else if (message == "UEKM") {
         this->sendMessage(socketFD, "T-END");
         this->active = false;
-        print("TSERVER STOP AND EXIT");
+        print("TServerT1V1 STOP AND EXIT");
     } else {
         perror("ERROR IN PROTOCOL INITIALIZATION");
         return;
     }
 }
 
-bool TServer::sendStream(ifstream data, int socket) {
+bool TServerT1V1::sendStream(ifstream data, int socket) {
     uint32_t CHUNK_SIZE = 10000;
     streampos begin, end;
     begin = data.tellg();
@@ -170,7 +170,7 @@ bool TServer::sendStream(ifstream data, int socket) {
     }
 }
 
-bool TServer::sendMessage(int socketFD, string message) {
+bool TServerT1V1::sendMessage(int socketFD, string message) {
     if (send(socketFD, message.c_str(), strlen(message.c_str()), 0) < 0) {
         perror("SEND FAILED.");
         return false;
@@ -180,7 +180,7 @@ bool TServer::sendMessage(int socketFD, string message) {
     }
 }
 
-string TServer::receiveMessage(int socketFD, int buffersize) {
+string TServerT1V1::receiveMessage(int socketFD, int buffersize) {
     char buffer[buffersize];
     string message;
     if (recv(socketFD, buffer, static_cast<size_t>(buffersize), 0) < 0) {
@@ -192,7 +192,7 @@ string TServer::receiveMessage(int socketFD, int buffersize) {
     return message;
 }
 
-ifstream TServer::receiveStream(int socketFD, string filename) {
+ifstream TServerT1V1::receiveStream(int socketFD, string filename) {
     uint32_t size;
     auto *data = (char *) &size;
     if (recv(socketFD, data, sizeof(uint32_t), 0) < 0) {
@@ -224,7 +224,7 @@ ifstream TServer::receiveStream(int socketFD, string filename) {
     return ifstream(filename);
 }
 
-void TServer::log(int socket, string message) {
+void TServerT1V1::log(int socket, string message) {
     sockaddr address;
     socklen_t addressLength;
     sockaddr_in *addressInternet;
@@ -238,7 +238,7 @@ void TServer::log(int socket, string message) {
     print(msg);
 }
 
-void TServer::receiveEncryptionParamFromClient(int socketFD) {
+void TServerT1V1::receiveEncryptionParamFromClient(int socketFD) {
     this->sendMessage(socketFD, "T-PK-READY");
     this->receiveStream(socketFD, "pkC.dat");
     this->sendMessage(socketFD, "T-PK-RECEIVED");
@@ -268,9 +268,10 @@ void TServer::receiveEncryptionParamFromClient(int socketFD) {
     this->sendMessage(socketFD, "T-C-RECEIVED");
     print("PROTOCOL 2 COMPLETED");
 
+    close(socketFD);
 }
 
-void TServer::initializeKM(int socketFD) {
+void TServerT1V1::initializeKM(int socketFD) {
     this->sendMessage(socketFD, "T-READY");
     uint32_t size;
     auto *data = (char *) &size;
@@ -285,9 +286,10 @@ void TServer::initializeKM(int socketFD) {
     }
     this->sendMessage(socketFD, "T-K-RECEIVED");
     print("PROTOCOL 4 COMPLETED");
+    close(socketFD);
 }
 
-void TServer::classifyToCluster(int socketFD) {
+void TServerT1V1::classifyToCluster(int socketFD) {
     this->sendMessage(socketFD, "T-READY");
     for (int i = 0; i < this->k; i++) {
         uint32_t index;
@@ -320,9 +322,10 @@ void TServer::classifyToCluster(int socketFD) {
         perror("ERROR IN PROTOCOL 5-STEP 2");
         return;
     }
+    close(socketFD);
 }
 
-unsigned TServer::extractClusterIndex() {
+unsigned TServerT1V1::extractClusterIndex() {
     map<unsigned, long> distancesHM;
     ZZ p = this->client_context->ModulusP();
     for (unsigned i = 0; i < this->k; i++) {
@@ -343,7 +346,7 @@ unsigned TServer::extractClusterIndex() {
     return index;
 }
 
-void TServer::calculateCentroid(int socketFD) {
+void TServerT1V1::calculateCentroid(int socketFD) {
     this->sendMessage(socketFD, "T-NC-READY");
     for(unsigned i=0;i<this->k;i++) {
         uint32_t index;
@@ -381,10 +384,11 @@ void TServer::calculateCentroid(int socketFD) {
     }
     this->sendMessage(socketFD,"T-READY");
     print("K-MEANS ROUND FINISH");
+    close(socketFD);
 }
 
 
-Plaintext TServer::newCentroid(const Plaintext &sum, long mean) {
+Plaintext TServerT1V1::newCentroid(const Plaintext &sum, long mean) {
     ZZ_pX centroidx = sum.message;
     ZZ_pX new_centroid;
     ZZ_p coef;
@@ -399,7 +403,7 @@ Plaintext TServer::newCentroid(const Plaintext &sum, long mean) {
 }
 
 
-ifstream TServer::centroidsToStream(const Ciphertext &centroid) {
+ifstream TServerT1V1::centroidsToStream(const Ciphertext &centroid) {
     ofstream ofstream1("centroid.dat");
     Export(ofstream1, centroid);
     return ifstream("centroid.dat");

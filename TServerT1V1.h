@@ -2,8 +2,8 @@
 // Created by george on 16/11/2017.
 //
 
-#ifndef TSERVER_TSERVER_H
-#define TSERVER_TSERVER_H
+#ifndef TServerT1V1_TServerT1V1_H
+#define TServerT1V1_TServerT1V1_H
 
 #include "iostream"
 #include <cstring>
@@ -14,9 +14,10 @@
 #include "FHEContext.h"
 #include "Serialization.h"
 #include <map>
+#include "unistd.h"
 using namespace std;
 
-class TServer {
+class TServerT1V1 {
 private:
     unsigned k;
     map<unsigned,long> clusters_counter;
@@ -42,7 +43,7 @@ private:
     Plaintext newCentroid(const Plaintext &,long);
     ifstream centroidsToStream(const Ciphertext &);
 public:
-    TServer(string,int);
+    TServerT1V1(string,int);
     bool sendStream(ifstream,int);
     bool sendMessage(int,string);
     string receiveMessage(int, int buffersize=64);
@@ -55,4 +56,4 @@ public:
 };
 
 
-#endif //TSERVER_TSERVER_H
+#endif //TServerT1V1_TServerT1V1_H
