@@ -101,8 +101,6 @@ void TServerT1V1::handleRequest(int socketFD) {
         this->initializeKM(socketFD);
     } else if (message == "U-DP") {
         this->classifyToCluster(socketFD);
-    } else if (message == "U-NC") {
-        this->calculateCentroid(socketFD);
     } else if (message == "UEKM") {
         this->sendMessage(socketFD, "T-END");
         this->active = false;
@@ -346,65 +344,3 @@ unsigned TServerT1V1::extractClusterIndex() {
     return index;
 }
 
-void TServerT1V1::calculateCentroid(int socketFD) {
-    this->sendMessage(socketFD, "T-NC-READY");
-    for(unsigned i=0;i<this->k;i++) {
-        uint32_t index;
-        auto *data = (char *) &index;
-        if (recv(socketFD, data, sizeof(uint32_t), 0) < 0) {
-            perror("RECEIVE INDEX ERROR");
-        }
-        ntohl(index);
-        this->sendMessage(socketFD,"T-RECEIVED-CI");
-        Ciphertext centroidsum(*this->client_pubkey);
-        this->receiveStream(socketFD, to_string(index) + "centroidsum.dat");
-        ifstream in(to_string(index) + "centroidsum.dat");
-        Import(in, centroidsum);
-        this->sendMessage(socketFD,"T-RECEIVED-C");
-        Plaintext pcentroidsum;
-        this->t_server_SM->ApplyKeySwitch(centroidsum);
-        this->t_server_seckey->Decrypt(pcentroidsum,centroidsum);
-        Plaintext newcentroid=this->newCentroid(pcentroidsum,this->clusters_counter[index]);
-        Ciphertext cnewcnetroid(*this->client_pubkey);
-        this->client_pubkey->Encrypt(cnewcnetroid,newcentroid);
-        this->sendStream(this->centroidsToStream(cnewcnetroid),socketFD);
-        string message = this->receiveMessage(socketFD, 13);
-        if (message != "U-NC-RECEIVED") {
-            perror("ERROR IN PROTOCOL 6-STEP 4");
-            return;
-        }
-    }
-    string message1 = this->receiveMessage(socketFD, 11);
-    if (message1 != "U-C-UPDATED") {
-        perror("ERROR IN PROTOCOL 6-STEP 5");
-        return;
-    }
-    for(auto &iter:this->clusters_counter){
-        iter.second=0;
-    }
-    this->sendMessage(socketFD,"T-READY");
-    print("K-MEANS ROUND FINISH");
-    close(socketFD);
-}
-
-
-Plaintext TServerT1V1::newCentroid(const Plaintext &sum, long mean) {
-    ZZ_pX centroidx = sum.message;
-    ZZ_pX new_centroid;
-    ZZ_p coef;
-    for (long i = 0; i < centroidx.rep.length(); i++) {
-        coef = coeff(centroidx, i);
-        ZZ x = rep(coef);
-        long t = to_long(x) / mean;
-        SetCoeff(new_centroid, i, t);
-    }
-    Plaintext centroid(*this->client_context, new_centroid);
-    return centroid;
-}
-
-
-ifstream TServerT1V1::centroidsToStream(const Ciphertext &centroid) {
-    ofstream ofstream1("centroid.dat");
-    Export(ofstream1, centroid);
-    return ifstream("centroid.dat");
-}

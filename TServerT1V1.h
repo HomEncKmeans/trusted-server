@@ -20,7 +20,7 @@ using namespace std;
 class TServerT1V1 {
 private:
     unsigned k;
-    map<unsigned,long> clusters_counter;
+
     map<unsigned,Ciphertext> point_distances;
     bool active;
     string t_serverIP;
@@ -39,9 +39,7 @@ private:
     void initializeKM(int);
     void classifyToCluster(int);
     unsigned extractClusterIndex();
-    void calculateCentroid(int);
-    Plaintext newCentroid(const Plaintext &,long);
-    ifstream centroidsToStream(const Ciphertext &);
+
 public:
     TServerT1V1(string,int);
     bool sendStream(ifstream,int);
