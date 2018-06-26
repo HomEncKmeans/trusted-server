@@ -102,9 +102,7 @@ void TServerT1V3::handleRequest(int socketFD) {
         this->initializeKM(socketFD);
     } else if (message == "U-DP") {
         this->classifyToCluster(socketFD);
-    } else if (message == "U-NC") {
-        this->calculateCentroid(socketFD);
-    } else if (message == "UEKM") {
+    }  else if (message == "UEKM") {
         this->sendMessage(socketFD, "T-END");
         this->active = false;
         print("TServerT1V3 STOP AND EXIT");
@@ -114,62 +112,6 @@ void TServerT1V3::handleRequest(int socketFD) {
     }
 }
 
-bool TServerT1V3::sendStream(ifstream data, int socket) {
-    uint32_t CHUNK_SIZE = 10000;
-    streampos begin, end;
-    begin = data.tellg();
-    data.seekg(0, ios::end);
-    end = data.tellg();
-    streampos size = end - begin;
-    uint32_t sizek;
-    sizek = static_cast<uint32_t>(size);
-    data.seekg(0, std::ios::beg);
-    auto *memblock = new char[sizek];
-    data.read(memblock, sizek);
-    data.close();
-    htonl(sizek);
-    if (0 > send(socket, &sizek, sizeof(uint32_t), 0)) {
-        perror("SEND FAILED.");
-        return false;
-    } else {
-        this->log(socket, "<--- " + to_string(sizek));
-        if (this->receiveMessage(socket, 7) == "SIZE-OK") {
-            auto *buffer = new char[CHUNK_SIZE];
-            uint32_t beginmem = 0;
-            uint32_t endmem = 0;
-            uint32_t num_of_blocks = sizek / CHUNK_SIZE;
-            uint32_t rounds = 0;
-            while (rounds <= num_of_blocks) {
-                if (rounds == num_of_blocks) {
-                    uint32_t rest = sizek - (num_of_blocks) * CHUNK_SIZE;
-                    endmem += rest;
-                    copy(memblock + beginmem, memblock + endmem, buffer);
-                    ssize_t r = (send(socket, buffer, rest, 0));
-                    rounds++;
-                    if (r < 0) {
-                        perror("SEND FAILED.");
-                        return false;
-                    }
-                } else {
-                    endmem += CHUNK_SIZE;
-                    copy(memblock + beginmem, memblock + endmem, buffer);
-                    beginmem = endmem;
-                    ssize_t r = (send(socket, buffer, 10000, 0));
-                    rounds++;
-                    if (r < 0) {
-                        perror("SEND FAILED.");
-                        return false;
-                    }
-                }
-            }
-            return true;
-
-        } else {
-            perror("SEND SIZE ERROR");
-            return false;
-        }
-    }
-}
 
 bool TServerT1V3::sendMessage(int socketFD, string message) {
     if (send(socketFD, message.c_str(), strlen(message.c_str()), 0) < 0) {
@@ -354,88 +296,59 @@ unsigned TServerT1V3::extractClusterIndex() {
     return index;
 }
 
-void TServerT1V3::calculateCentroid(int socketFD) {
-    this->sendMessage(socketFD, "T-NC-READY");
-    for (unsigned i = 0; i < this->k; i++) {
-
-        uint32_t cluster_index;
-        auto *data = (char *) &cluster_index;
-        if (recv(socketFD, data, sizeof(uint32_t), 0) < 0) {
-            perror("RECEIVE CLUSTER INDEX ERROR");
-        }
-        ntohl(cluster_index);
-        this->sendMessage(socketFD, "T-RECEIVED-CI");
-        for (unsigned j = 0; j < this->dim; j++) {
-            uint32_t coef_index;
-            auto *data1 = (char *) &coef_index;
-            if (recv(socketFD, data1, sizeof(uint32_t), 0) < 0) {
-                perror("RECEIVE COEFFICIENT INDEX ERROR");
-            }
-            ntohl(coef_index);
-            this->sendMessage(socketFD, "T-INDEX-RECEIVED");
-            Ciphertext centroid_coef_sum(*this->client_pubkey);
-            this->receiveStream(socketFD, to_string(cluster_index) + "centroidsum.dat");
-            ifstream in(to_string(cluster_index) + "centroidsum.dat");
-            Import(in, centroid_coef_sum);
-            this->sendMessage(socketFD, "T-COEF-RECEIVED");
-            string message = this->receiveMessage(socketFD, 5);
-            if (message != "U-R-C") {
-                perror("ERROR IN PROTOCOL 6-STEP 3");
-                return;
-            }
-            Plaintext pcoefcentroidsum;
-            this->t_server_SM->ApplyKeySwitch(centroid_coef_sum);
-            this->t_server_seckey->Decrypt(pcoefcentroidsum, centroid_coef_sum);
-            Plaintext newcentroid = this->newCentroidCoef(pcoefcentroidsum, this->clusters_counter[cluster_index]);
-            Ciphertext cnewcnetroid(*this->client_pubkey);
-            this->client_pubkey->Encrypt(cnewcnetroid, newcentroid);
-            this->sendStream(this->centroidCoefToStream(cnewcnetroid), socketFD);
-            string message1 = this->receiveMessage(socketFD, 8);
-            if (message1 != "U-R-COEF") {
-                perror("ERROR IN PROTOCOL 6-STEP 4");
-                return;
-            }
-        }
-
-        string message2 = this->receiveMessage(socketFD, 13);
-        if (message2 != "U-NC-RECEIVED") {
-            perror("ERROR IN PROTOCOL 6-STEP 4");
-            return;
-        }
-    }
-    string message3 = this->receiveMessage(socketFD, 11);
-    if (message3 != "U-C-UPDATED") {
-        perror("ERROR IN PROTOCOL 6-STEP 5");
-        return;
-    }
-    for (auto &iter:this->clusters_counter) {
-        iter.second = 0;
-    }
-    this->sendMessage(socketFD, "T-READY");
-    print("K-MEANS ROUND FINISH");
-}
-
-
-Plaintext TServerT1V3::newCentroidCoef(const Plaintext &sum, long mean) {
-    ZZ_pX centroidx = sum.message;
-    ZZ_pX new_centroid_coef;
-    ZZ_p coef;
-    coef = coeff(centroidx, 0);
-    const ZZ &x = rep(coef);
-    long t;
-    if (mean != 0) {
-        t = to_long(x) / mean;
+bool TServerT1V3::sendStream(ifstream data, int socket) {
+    uint32_t CHUNK_SIZE = 10000;
+    streampos begin, end;
+    begin = data.tellg();
+    data.seekg(0, ios::end);
+    end = data.tellg();
+    streampos size = end - begin;
+    uint32_t sizek;
+    sizek = static_cast<uint32_t>(size);
+    data.seekg(0, std::ios::beg);
+    auto *memblock = new char[sizek];
+    data.read(memblock, sizek);
+    data.close();
+    htonl(sizek);
+    if (0 > send(socket, &sizek, sizeof(uint32_t), 0)) {
+        perror("SEND FAILED.");
+        return false;
     } else {
-        t = to_long(x);
+        this->log(socket, "<--- " + to_string(sizek));
+        if (this->receiveMessage(socket, 7) == "SIZE-OK") {
+            auto *buffer = new char[CHUNK_SIZE];
+            uint32_t beginmem = 0;
+            uint32_t endmem = 0;
+            uint32_t num_of_blocks = sizek / CHUNK_SIZE;
+            uint32_t rounds = 0;
+            while (rounds <= num_of_blocks) {
+                if (rounds == num_of_blocks) {
+                    uint32_t rest = sizek - (num_of_blocks) * CHUNK_SIZE;
+                    endmem += rest;
+                    copy(memblock + beginmem, memblock + endmem, buffer);
+                    ssize_t r = (send(socket, buffer, rest, 0));
+                    rounds++;
+                    if (r < 0) {
+                        perror("SEND FAILED.");
+                        return false;
+                    }
+                } else {
+                    endmem += CHUNK_SIZE;
+                    copy(memblock + beginmem, memblock + endmem, buffer);
+                    beginmem = endmem;
+                    ssize_t r = (send(socket, buffer, 10000, 0));
+                    rounds++;
+                    if (r < 0) {
+                        perror("SEND FAILED.");
+                        return false;
+                    }
+                }
+            }
+            return true;
+
+        } else {
+            perror("SEND SIZE ERROR");
+            return false;
+        }
     }
-    SetCoeff(new_centroid_coef, 0, t);
-    Plaintext centroid_coef(*this->client_context, new_centroid_coef);
-    return centroid_coef;
-}
-
-
-ifstream TServerT1V3::centroidCoefToStream(const Ciphertext &centroid) {
-    ofstream ofstream1("centroidcoef.dat");
-    Export(ofstream1, centroid);
-    return ifstream("centroidcoef.dat");
 }

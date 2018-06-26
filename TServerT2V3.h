@@ -2,8 +2,8 @@
 // Created by george on 16/11/2017.
 //
 
-#ifndef TServerT1V3_TServerT1V3_H
-#define TServerT1V3_TServerT1V3_H
+#ifndef TServer_TServer_H
+#define TServer_TServer_H
 
 #include "iostream"
 #include <cstring>
@@ -16,7 +16,7 @@
 #include <map>
 using namespace std;
 
-class TServerT1V3 {
+class TServerT2V3 {
 private:
     unsigned k;
     unsigned dim;
@@ -40,18 +40,23 @@ private:
     void initializeKM(int);
     void classifyToCluster(int);
     unsigned extractClusterIndex();
-
+    void calculateCentroid(int);
+    void calculateVariance(int);
+    Plaintext newCentroidCoef(const Plaintext &,long);
+    ifstream centroidCoefToStream(const Ciphertext &);
+    ifstream indexToStream(const Ciphertext &);
 public:
-    TServerT1V3(string,int, bool verbose=true);
+    TServerT2V3(string,int, bool verbose=true);
+    bool sendStream(ifstream,int);
     bool sendMessage(int,string);
     string receiveMessage(int, int buffersize=64);
     ifstream receiveStream(int,string filename="temp.dat");
     void log(int,string);
-    bool sendStream(ifstream, int);
+
 
 
 
 };
 
 
-#endif //TServerT1V3_TServerT1V3_H
+#endif
