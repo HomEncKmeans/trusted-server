@@ -251,10 +251,22 @@ void TServerT1V2::classifyToCluster(int socketFD) {
         }
         ntohl(index);
         this->sendMessage(socketFD, "T-RECEIVED-CI");
-        Ciphertext distance(*this->client_pubkey);
-        this->receiveStream(socketFD, to_string(index) + ".dat");
-        ifstream in(to_string(index) + ".dat");
-        Import(in, distance);
+        uint32_t point_size;
+        auto *data1 = (char *) &point_size;
+        if (recv(socketFD, data1, sizeof(uint32_t), 0) < 0) {
+            perror("RECEIVE POINT SIZE ERROR");
+        }
+        ntohl(point_size);
+        this->sendMessage(socketFD, "T-R-SIZE");
+        vector<Ciphertext> distance;
+        for(unsigned j=0;j<point_size;j++){
+            Ciphertext distance_coef(*this->client_pubkey);
+            this->receiveStream(socketFD, "dist_coef"+to_string(j) + ".dat");
+            ifstream in("dist_coef"+to_string(j) + ".dat");
+            Import(in, distance_coef);
+            this->sendMessage(socketFD, "T-COEF-R");    
+            distance.push_back(distance_coef);
+        }
         this->point_distances[index] = distance;
         this->sendMessage(socketFD, "T-D-RECEIVED");
     }
@@ -277,20 +289,26 @@ void TServerT1V2::classifyToCluster(int socketFD) {
 }
 
 unsigned TServerT1V2::extractClusterIndex() {
-    map<unsigned, long> distancesEuclidean;
+    map<unsigned, long> distancesManhattan;
+    ZZ p =this->client_context->ModulusP();
+
     for (unsigned i = 0; i < this->k; i++) {
-        Plaintext pdistance;
-        Ciphertext cdistance = this->point_distances[i];
-        this->t_server_SM->ApplyKeySwitch(cdistance);
-        this->t_server_seckey->Decrypt(pdistance, cdistance);
-        distancesEuclidean[i] = extractDistance(pdistance);
+        vector<Plaintext> pdistance;
+        vector<Ciphertext> cdistance = this->point_distances[i];
+        for (auto &enccoef : cdistance) {
+            Plaintext p_coef;
+            this->t_server_SM->ApplyKeySwitch(enccoef);
+            this->t_server_seckey->Decrypt(p_coef, enccoef);
+            pdistance.emplace_back(p_coef);
+        }
+        distancesManhattan[i]=extractHM1(pdistance,p);
     }
     unsigned index = 0;
-    long min = distancesEuclidean[index];
+    long min = distancesManhattan[index];
     for (unsigned i = 0; i < this->k; i++) {
-        if (min > distancesEuclidean[i]) {
+        if (min > distancesManhattan[i]) {
             index = i;
-            min = distancesEuclidean[i];
+            min = distancesManhattan[i];
         }
     }
     return index;

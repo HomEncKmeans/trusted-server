@@ -19,8 +19,8 @@
 #include "ctime"
 #include "iomanip"
 long extractHM(const Plaintext &distance,ZZ &p);
+long extractHM1(const vector<Plaintext> &distance, ZZ &p);
 long extractDistance(const Plaintext &distance);
-long extractHM1(vector<Plaintext> &distance, ZZ &p);
 void timeCalulator(const clock_t &c_start, const chrono::high_resolution_clock::time_point &t_start);
 template <typename T>
 void print(const T &message){
