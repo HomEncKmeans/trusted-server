@@ -347,20 +347,22 @@ void TServerT2V1::classifyToCluster(int socketFD) {
 }
 
 unsigned TServerT2V1::extractClusterIndex() {
-    map<unsigned, long> distancesEuclidean;
+    map<unsigned, long> distancesManhattan;
+    ZZ p =this->client_context->ModulusP();
+
     for (unsigned i = 0; i < this->k; i++) {
         Plaintext pdistance;
         Ciphertext cdistance = this->point_distances[i];
         this->t_server_SM->ApplyKeySwitch(cdistance);
         this->t_server_seckey->Decrypt(pdistance, cdistance);
-        distancesEuclidean[i] = extractDistance(pdistance);
+        distancesManhattan[i] = extractHM(pdistance,p);
     }
     unsigned index = 0;
-    long min = distancesEuclidean[index];
+    long min = distancesManhattan[index];
     for (unsigned i = 0; i < this->k; i++) {
-        if (min > distancesEuclidean[i]) {
+        if (min > distancesManhattan[i]) {
             index = i;
-            min = distancesEuclidean[i];
+            min = distancesManhattan[i];
         }
     }
     return index;
