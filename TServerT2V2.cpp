@@ -2,9 +2,9 @@
 // Created by george on 16/11/2017.
 //
 
-#include "TServerT2V3.h"
+#include "TServerT2V2.h"
 
-TServerT2V3::TServerT2V3(string t_serverIP, int t_serverPort, bool verbose) {
+TServerT2V2::TServerT2V2(string t_serverIP, int t_serverPort, bool verbose) {
     this->active = true;
     this->t_serverIP = move(t_serverIP);
     this->t_serverPort = t_serverPort;
@@ -35,9 +35,9 @@ TServerT2V3::TServerT2V3(string t_serverIP, int t_serverPort, bool verbose) {
     print(fhEcontext);
     print("CLIENT PUBLIC KEY");
     print(fhesiPubKey);
-    print("TServerT2V3 SECRET KEY");
+    print("TServerT2V2 SECRET KEY");
     print(fhesiSecKey);
-    print("TServerT2V3 SWITCH MATRIX ");
+    print("TServerT2V2 SWITCH MATRIX ");
     print(keySwitchSI);
 
     while (this->active) {
@@ -47,7 +47,7 @@ TServerT2V3::TServerT2V3(string t_serverIP, int t_serverPort, bool verbose) {
 }
 
 
-void TServerT2V3::socketCreate() {
+void TServerT2V2::socketCreate() {
     this->t_serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (this->t_serverSocket < 0) {
         perror("ERROR IN SOCKET CREATION");
@@ -61,7 +61,7 @@ void TServerT2V3::socketCreate() {
 
 }
 
-void TServerT2V3::socketBind() {
+void TServerT2V2::socketBind() {
     struct sockaddr_in u_serverAddress;
     u_serverAddress.sin_family = AF_INET;
     u_serverAddress.sin_port = htons(static_cast<uint16_t>(this->t_serverPort));
@@ -76,13 +76,13 @@ void TServerT2V3::socketBind() {
 
 }
 
-void TServerT2V3::socketListen() {
+void TServerT2V2::socketListen() {
     listen(this->t_serverSocket, 5);
     print("Server is listening...");
 
 }
 
-void TServerT2V3::socketAccept() {
+void TServerT2V2::socketAccept() {
     int socketFD;
     socketFD = accept(this->t_serverSocket, NULL, NULL);
     if (socketFD < 0) {
@@ -94,7 +94,7 @@ void TServerT2V3::socketAccept() {
 
 }
 
-void TServerT2V3::handleRequest(int socketFD) {
+void TServerT2V2::handleRequest(int socketFD) {
     string message = this->receiveMessage(socketFD, 4);
     if (message == "C-PK") {
         this->receiveEncryptionParamFromClient(socketFD);
@@ -105,14 +105,14 @@ void TServerT2V3::handleRequest(int socketFD) {
     } else if (message == "UEKM") {
         this->sendMessage(socketFD, "T-END");
         this->active = false;
-        print("TServerT2V3 STOP AND EXIT");
+        print("TServerT2V2 STOP AND EXIT");
     } else {
         perror("ERROR IN PROTOCOL INITIALIZATION");
         return;
     }
 }
 
-bool TServerT2V3::sendStream(ifstream data, int socket) {
+bool TServerT2V2::sendStream(ifstream data, int socket) {
     uint32_t CHUNK_SIZE = 10000;
     streampos begin, end;
     begin = data.tellg();
@@ -169,7 +169,7 @@ bool TServerT2V3::sendStream(ifstream data, int socket) {
     }
 }
 
-bool TServerT2V3::sendMessage(int socketFD, string message) {
+bool TServerT2V2::sendMessage(int socketFD, string message) {
     if (send(socketFD, message.c_str(), strlen(message.c_str()), 0) < 0) {
         perror("SEND FAILED.");
         return false;
@@ -179,7 +179,7 @@ bool TServerT2V3::sendMessage(int socketFD, string message) {
     }
 }
 
-string TServerT2V3::receiveMessage(int socketFD, int buffersize) {
+string TServerT2V2::receiveMessage(int socketFD, int buffersize) {
     char buffer[buffersize];
     string message;
     if (recv(socketFD, buffer, static_cast<size_t>(buffersize), 0) < 0) {
@@ -191,7 +191,7 @@ string TServerT2V3::receiveMessage(int socketFD, int buffersize) {
     return message;
 }
 
-ifstream TServerT2V3::receiveStream(int socketFD, string filename) {
+ifstream TServerT2V2::receiveStream(int socketFD, string filename) {
     uint32_t size;
     auto *data = (char *) &size;
     if (recv(socketFD, data, sizeof(uint32_t), 0) < 0) {
@@ -223,7 +223,7 @@ ifstream TServerT2V3::receiveStream(int socketFD, string filename) {
     return ifstream(filename);
 }
 
-void TServerT2V3::log(int socket, string message) {
+void TServerT2V2::log(int socket, string message) {
     if (this->verbose) {
         sockaddr address;
         socklen_t addressLength;
@@ -239,7 +239,7 @@ void TServerT2V3::log(int socket, string message) {
     }
 }
 
-void TServerT2V3::receiveEncryptionParamFromClient(int socketFD) {
+void TServerT2V2::receiveEncryptionParamFromClient(int socketFD) {
     this->sendMessage(socketFD, "T-PK-READY");
     this->receiveStream(socketFD, "pkC.dat");
     this->sendMessage(socketFD, "T-PK-RECEIVED");
@@ -271,7 +271,7 @@ void TServerT2V3::receiveEncryptionParamFromClient(int socketFD) {
 
 }
 
-void TServerT2V3::initializeKM(int socketFD) {
+void TServerT2V2::initializeKM(int socketFD) {
     this->sendMessage(socketFD, "T-READY");
     uint32_t size;
     auto *data = (char *) &size;
@@ -294,7 +294,7 @@ void TServerT2V3::initializeKM(int socketFD) {
     print("PROTOCOL 4 COMPLETED");
 }
 
-void TServerT2V3::classifyToCluster(int socketFD) {
+void TServerT2V2::classifyToCluster(int socketFD) {
     this->sendMessage(socketFD, "T-READY");
     for (int i = 0; i < this->k; i++) {
         uint32_t index;
@@ -346,7 +346,7 @@ void TServerT2V3::classifyToCluster(int socketFD) {
     }
 }
 
-unsigned TServerT2V3::extractClusterIndex() {
+unsigned TServerT2V2::extractClusterIndex() {
     map<unsigned, long> distancesEuclidean;
     for (unsigned i = 0; i < this->k; i++) {
         Plaintext pdistance;
@@ -366,7 +366,7 @@ unsigned TServerT2V3::extractClusterIndex() {
     return index;
 }
 
-ifstream TServerT2V3::indexToStream(const Ciphertext &index) {
+ifstream TServerT2V2::indexToStream(const Ciphertext &index) {
     ofstream ofstream1("index.dat");
     Export(ofstream1, index);
     return ifstream("index.dat");

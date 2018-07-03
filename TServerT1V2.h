@@ -2,24 +2,25 @@
 // Created by george on 16/11/2017.
 //
 
-#ifndef TServer_TServer_H
-#define TServer_TServer_H
+#ifndef TServerT1V2_TServerT1V2_H
+#define TServerT1V2_TServerT1V2_H
 
 #include "iostream"
 #include <cstring>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include "tserverfhesiutils.h"
+#include "old_techniques/tserverfhesiutils.h"
 #include "FHE-SI.h"
 #include "FHEContext.h"
 #include "Serialization.h"
 #include <map>
 using namespace std;
 
-class TServerT2V3 {
+class TServerT1V2 {
 private:
     unsigned k;
     unsigned dim;
+    map<uint32_t ,long> clusters_counter;
     map<uint32_t,Ciphertext> point_distances;
     bool active;
     bool verbose;
@@ -39,19 +40,18 @@ private:
     void initializeKM(int);
     void classifyToCluster(int);
     unsigned extractClusterIndex();
-    ifstream indexToStream(const Ciphertext &);
+
 public:
-    TServerT2V3(string,int, bool verbose=true);
-    bool sendStream(ifstream,int);
+    TServerT1V2(string,int, bool verbose=true);
     bool sendMessage(int,string);
     string receiveMessage(int, int buffersize=64);
     ifstream receiveStream(int,string filename="temp.dat");
     void log(int,string);
-
+    bool sendStream(ifstream, int);
 
 
 
 };
 
 
-#endif
+#endif //TServerT1V2_TServerT1V2_H

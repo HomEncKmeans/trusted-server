@@ -24,6 +24,16 @@ long extractHM(const Plaintext &distance, ZZ &p) {
     return to_long(hmd);
 }
 
+long extractHM1(const vector<Plaintext> &distance, ZZ &p){
+    long dimension = distance.size();
+    long result=0;
+    for(unsigned i=0;i<dimension;i++){
+        result+=extractHM(distance[i],p);
+    }
+    return result;
+
+}
+
 long extractDistance(const Plaintext &distance) {
     ZZ_pX dp =distance.message;
     ZZ_p dhm;

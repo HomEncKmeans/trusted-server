@@ -9,14 +9,14 @@
 #include <cstring>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include "tserverfhesiutils.h"
+#include "old_techniques/tserverfhesiutils.h"
 #include "FHE-SI.h"
 #include "FHEContext.h"
 #include "Serialization.h"
 #include <map>
 using namespace std;
 
-class TServerT2V3 {
+class TServerT2V2 {
 private:
     unsigned k;
     unsigned dim;
@@ -41,7 +41,7 @@ private:
     unsigned extractClusterIndex();
     ifstream indexToStream(const Ciphertext &);
 public:
-    TServerT2V3(string,int, bool verbose=true);
+    TServerT2V2(string,int, bool verbose=true);
     bool sendStream(ifstream,int);
     bool sendMessage(int,string);
     string receiveMessage(int, int buffersize=64);
