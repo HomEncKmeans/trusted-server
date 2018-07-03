@@ -9,7 +9,7 @@
 #include <cstring>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include "old_techniques/tserverfhesiutils.h"
+#include "tserverfhesiutils.h"
 #include "FHE-SI.h"
 #include "FHEContext.h"
 #include "Serialization.h"
@@ -20,7 +20,7 @@ class TServerT2V2 {
 private:
     unsigned k;
     unsigned dim;
-    map<uint32_t,Ciphertext> point_distances;
+    map<uint32_t,vector<Ciphertext>> point_distances;
     bool active;
     bool verbose;
     string t_serverIP;
